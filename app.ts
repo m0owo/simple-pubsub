@@ -5,11 +5,11 @@ interface IEvent {
 }
 
 interface ISubscriber {
-  handle(event: IEvent): void;
+  handle(event: IEvent): IEvent | undefined;
 }
 
 interface IPublishSubscribeService {
-  publish(event: IEvent): void;
+  publish(event: IEvent): IEvent | undefined;
   subscribe(type: string, handler: ISubscriber): void;
   unsubscribe(type: string, handler: ISubscriber): void;
 }
@@ -20,7 +20,7 @@ class MachineSaleEvent implements IEvent {
     private readonly _sold: number,
     private readonly _machineId: string
   ) {
-    console.log("generating sale event", _sold, _machineId);
+    console.log("generating sale event", this._sold, this._machineId);
   }
 
   machineId(): string {
@@ -41,7 +41,7 @@ class MachineRefillEvent implements IEvent {
     private readonly _refill: number,
     private readonly _machineId: string
   ) {
-    console.log("generating refill event", _refill, _machineId);
+    console.log("generating refill event", this._refill, this._machineId);
   }
 
   machineId(): string {
@@ -57,6 +57,44 @@ class MachineRefillEvent implements IEvent {
   }
 }
 
+class LowStockWarningEvent implements IEvent {
+  constructor(
+    private readonly _stock: number,
+    private readonly _machineId: string
+  ) {
+    // console.log(
+    //   "stock too low warning generated: ",
+    //   this._stock,
+    //   this._machineId
+    // );
+  }
+
+  machineId(): string {
+    return this._machineId;
+  }
+
+  type(): string {
+    return "low stock";
+  }
+}
+
+class StockLevelOkEvent implements IEvent {
+  constructor(
+    private readonly _stock: number,
+    private readonly _machineId: string
+  ) {
+    // console.log("ok stock warning generated: ", this._stock, this._machineId);
+  }
+
+  machineId(): string {
+    return this._machineId;
+  }
+
+  type(): string {
+    return "ok stock";
+  }
+}
+
 class MachineSaleSubscriber implements ISubscriber {
   public machines: Machine[];
 
@@ -64,16 +102,19 @@ class MachineSaleSubscriber implements ISubscriber {
     this.machines = machines;
   }
 
-  handle(event: MachineSaleEvent): void {
+  handle(event: MachineSaleEvent): StockLevelOkEvent | undefined {
     console.log("selling from machine:", event.machineId());
-    this.machines.find((machine) => {
-      return machine.getMachineId() === event.machineId();
-    }).stockLevel -= event.getSoldQuantity();
+    const machine = this.machines.find((machine) => {
+      return machine.id === event.machineId();
+    });
+    machine.stockLevel -= event.getSoldQuantity();
 
     console.log("stock level of machines:");
-    this.machines.forEach((m) =>
-      console.log(m.getMachineId(), ":", m.getStockLevel())
-    );
+    this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
+
+    if (machine.stockLevel < 10) {
+      return new StockLevelOkEvent(machine.stockLevel, event.machineId());
+    }
   }
 }
 
@@ -84,16 +125,57 @@ class MachineRefillSubscriber implements ISubscriber {
     this.machines = machines;
   }
 
-  handle(event: MachineRefillEvent): void {
-    console.log("refilling to machine:", event.machineId());
-    this.machines.find((machine) => {
-      return machine.getMachineId() === event.machineId();
-    }).stockLevel += event.getRefillQuantity();
+  handle(event: MachineRefillEvent): LowStockWarningEvent | undefined {
+    console.log("refilling machine:", event.machineId());
+    const machine = this.machines.find((machine) => {
+      return machine.id === event.machineId();
+    });
+    machine.stockLevel += event.getRefillQuantity();
 
     console.log("stock level of machines:");
-    this.machines.forEach((m) =>
-      console.log(m.getMachineId(), ":", m.getStockLevel())
+    this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
+
+    if (machine.stockLevel >= 10) {
+      return new LowStockWarningEvent(machine.stockLevel, event.machineId());
+    }
+  }
+}
+
+class StockWarningSubscriber implements ISubscriber {
+  public machines: Machine[];
+
+  constructor(machines: Machine[]) {
+    this.machines = machines;
+  }
+
+  handle(event: LowStockWarningEvent): undefined {
+    console.log(
+      `***** Stock Levels Too Low Warning (Machine: ${event.machineId()}) *****`
     );
+    // this.machines.find((machine) => {
+    //   return machine.id === event.machineId();
+    // }).stockLevel += 3;
+
+    // console.log("stock level of machines:");
+    // this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
+  }
+}
+
+class StockOkSubscriber implements ISubscriber {
+  public machines: Machine[];
+
+  constructor(machines: Machine[]) {
+    this.machines = machines;
+  }
+
+  handle(event: StockLevelOkEvent): undefined {
+    console.log(`***** Stock Levels OK (Machine: ${event.machineId()}) *****`);
+    // this.machines.find((machine) => {
+    //   return machine.id === event.machineId();
+    // }).stockLevel += 3;
+
+    // console.log("stock level of machines:");
+    // this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
   }
 }
 
@@ -104,15 +186,18 @@ class PublishSubscribeService implements IPublishSubscribeService {
     this.subscribers = subscribers;
   }
 
-  publish(event: IEvent): void {
-    console.log("publish event:", event.type(), event.machineId());
-    if (this.subscribers == undefined) {
-      console.log("no subscribers");
-      return;
+  publish(event: IEvent): IEvent | undefined {
+    const handlers = this.subscribers[event.type()];
+    if (!handlers) return;
+
+    for (const handler of handlers) {
+      const warning = handler.handle(event);
+      if (warning !== undefined) {
+        return warning;
+      }
     }
-    console.log("subscribers found:", this.subscribers[event.type()]?.length);
-    this.subscribers[event.type()]?.forEach((handler) => handler.handle(event));
-    console.log();
+
+    return undefined;
   }
 
   subscribe(type: string, handler: ISubscriber): void {
@@ -141,12 +226,6 @@ class Machine {
 
   constructor(id: string) {
     this.id = id;
-  }
-  getStockLevel(): number {
-    return this.stockLevel;
-  }
-  getMachineId(): string {
-    return this.id;
   }
 }
 
@@ -183,6 +262,8 @@ const eventGenerator = (): IEvent => {
   // create a machine sale event subscriber. inject the machines (all subscribers should do this)
   const saleSubscriber = new MachineSaleSubscriber(machines);
   const refillSubscriber = new MachineRefillSubscriber(machines);
+  const warningSubscriber = new StockWarningSubscriber(machines);
+  const okSubscriber = new StockOkSubscriber(machines);
   console.log();
 
   // create the PubSub service
@@ -192,28 +273,44 @@ const eventGenerator = (): IEvent => {
   );
   pubSubService.subscribe("sale", saleSubscriber);
   pubSubService.subscribe("refill", refillSubscriber);
+  pubSubService.subscribe("low stock", warningSubscriber);
+  pubSubService.subscribe("ok stock", okSubscriber);
 
   // create 5 random events
   console.log(
     "-------------------- Generating Random Events --------------------"
   );
-  const events = [1, 2, 3, 4, 5].map(() => eventGenerator());
+  let events = [1, 2, 3, 4, 5].map(() => eventGenerator());
 
   // publish the events
+  // console.log("-------------------- Publishing Events --------------------");
+  // events.map((event) => pubSubService.publish(event));
   console.log("-------------------- Publishing Events --------------------");
-  events.map((event) => pubSubService.publish(event));
+  for (const event of [...events]) {
+    const result = pubSubService.publish(event);
+    if (result) {
+      pubSubService.publish(result);
+      // events.push(result);
+    }
+  }
 
   // unsubscribing
-  console.log("Unsubscribing --------------------");
+  console.log("-------------------- Unsubscribing --------------------");
   pubSubService.unsubscribe("sale", saleSubscriber);
 
   // create 5 random events
   console.log(
     "-------------------- Generating Random Events --------------------"
   );
-  const events2 = [1, 2, 3, 4, 5].map(() => eventGenerator());
+  events = [1, 2, 3, 4, 5].map(() => eventGenerator());
 
   // publish the events
   console.log("-------------------- Publishing Events --------------------");
-  events2.map((event) => pubSubService.publish(event));
+  for (const event of [...events]) {
+    const result = pubSubService.publish(event);
+    if (result) {
+      pubSubService.publish(result);
+      // events.push(result);
+    }
+  }
 })();
