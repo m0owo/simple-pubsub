@@ -102,7 +102,7 @@ class MachineSaleSubscriber implements ISubscriber {
     this.machines = machines;
   }
 
-  handle(event: MachineSaleEvent): StockLevelOkEvent | undefined {
+  handle(event: MachineSaleEvent): LowStockWarningEvent | undefined {
     console.log("selling from machine:", event.machineId());
     const machine = this.machines.find((machine) => {
       return machine.id === event.machineId();
@@ -113,7 +113,7 @@ class MachineSaleSubscriber implements ISubscriber {
     this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
 
     if (machine.stockLevel < 10) {
-      return new StockLevelOkEvent(machine.stockLevel, event.machineId());
+      return new LowStockWarningEvent(machine.stockLevel, event.machineId());
     }
   }
 }
@@ -125,7 +125,7 @@ class MachineRefillSubscriber implements ISubscriber {
     this.machines = machines;
   }
 
-  handle(event: MachineRefillEvent): LowStockWarningEvent | undefined {
+  handle(event: MachineRefillEvent): StockLevelOkEvent | undefined {
     console.log("refilling machine:", event.machineId());
     const machine = this.machines.find((machine) => {
       return machine.id === event.machineId();
@@ -136,7 +136,7 @@ class MachineRefillSubscriber implements ISubscriber {
     this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
 
     if (machine.stockLevel >= 10) {
-      return new LowStockWarningEvent(machine.stockLevel, event.machineId());
+      return new StockLevelOkEvent(machine.stockLevel, event.machineId());
     }
   }
 }
