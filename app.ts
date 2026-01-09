@@ -11,7 +11,7 @@ interface ISubscriber {
 interface IPublishSubscribeService {
   publish(event: IEvent): void;
   subscribe(type: string, handler: ISubscriber): void;
-  // unsubscribe ( /* Question 2 - build this feature */ );
+  unsubscribe(type: string, handler: ISubscriber): void;
 }
 
 // implementations
@@ -65,7 +65,7 @@ class MachineSaleSubscriber implements ISubscriber {
   }
 
   handle(event: MachineSaleEvent): void {
-    console.log("selling from machine:", event.machineId(), "\n");
+    console.log("selling from machine:", event.machineId());
     this.machines.find((machine) => {
       return machine.getMachineId() === event.machineId();
     }).stockLevel -= event.getSoldQuantity();
@@ -85,7 +85,7 @@ class MachineRefillSubscriber implements ISubscriber {
   }
 
   handle(event: MachineRefillEvent): void {
-    console.log("refilling from machine:", event.machineId(), "\n");
+    console.log("refilling to machine:", event.machineId());
     this.machines.find((machine) => {
       return machine.getMachineId() === event.machineId();
     }).stockLevel += event.getRefillQuantity();
@@ -112,6 +112,7 @@ class PublishSubscribeService implements IPublishSubscribeService {
     }
     console.log("subscribers found:", this.subscribers[event.type()]?.length);
     this.subscribers[event.type()]?.forEach((handler) => handler.handle(event));
+    console.log();
   }
 
   subscribe(type: string, handler: ISubscriber): void {
@@ -120,6 +121,16 @@ class PublishSubscribeService implements IPublishSubscribeService {
       this.subscribers[type] = [];
     }
     this.subscribers[type].push(handler);
+  }
+
+  unsubscribe(type: string, handler: ISubscriber): void {
+    console.log("unsubscribing from event", type);
+    if (!this.subscribers[type]) {
+      return;
+    }
+    this.subscribers[type] = this.subscribers[type].filter((subscriber) => {
+      return subscriber !== handler;
+    });
   }
 }
 
@@ -168,7 +179,6 @@ const eventGenerator = (): IEvent => {
     new Machine("002"),
     new Machine("003"),
   ];
-  console.log();
 
   // create a machine sale event subscriber. inject the machines (all subscribers should do this)
   const saleSubscriber = new MachineSaleSubscriber(machines);
@@ -177,15 +187,33 @@ const eventGenerator = (): IEvent => {
 
   // create the PubSub service
   const pubSubService: IPublishSubscribeService = new PublishSubscribeService();
+  console.log(
+    "-------------------- Subscribing to Events --------------------"
+  );
   pubSubService.subscribe("sale", saleSubscriber);
   pubSubService.subscribe("refill", refillSubscriber);
-  console.log();
 
   // create 5 random events
+  console.log(
+    "-------------------- Generating Random Events --------------------"
+  );
   const events = [1, 2, 3, 4, 5].map(() => eventGenerator());
-  console.log();
 
   // publish the events
+  console.log("-------------------- Publishing Events --------------------");
   events.map((event) => pubSubService.publish(event));
-  console.log();
+
+  // unsubscribing
+  console.log("Unsubscribing --------------------");
+  pubSubService.unsubscribe("sale", saleSubscriber);
+
+  // create 5 random events
+  console.log(
+    "-------------------- Generating Random Events --------------------"
+  );
+  const events2 = [1, 2, 3, 4, 5].map(() => eventGenerator());
+
+  // publish the events
+  console.log("-------------------- Publishing Events --------------------");
+  events2.map((event) => pubSubService.publish(event));
 })();
