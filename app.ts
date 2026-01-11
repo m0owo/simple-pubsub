@@ -73,6 +73,10 @@ class LowStockWarningEvent implements IEvent {
     return this._machineId;
   }
 
+  stock(): number {
+    return this._stock;
+  }
+
   type(): string {
     return "low stock";
   }
@@ -90,6 +94,10 @@ class StockLevelOkEvent implements IEvent {
     return this._machineId;
   }
 
+  stock(): number {
+    return this._stock;
+  }
+
   type(): string {
     return "ok stock";
   }
@@ -103,10 +111,18 @@ class MachineSaleSubscriber implements ISubscriber {
   }
 
   handle(event: MachineSaleEvent): LowStockWarningEvent | undefined {
-    console.log("selling from machine:", event.machineId());
+    console.log(
+      `selling ${event.getSoldQuantity()} from machine ${event.machineId()}`
+    );
     const machine = this.machines.find((machine) => {
       return machine.id === event.machineId();
     });
+    if (machine.stockLevel < 10) {
+      machine.stockLevel -= event.getSoldQuantity();
+      console.log("stock level of machines:");
+      this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
+      return;
+    }
     machine.stockLevel -= event.getSoldQuantity();
 
     console.log("stock level of machines:");
@@ -126,10 +142,19 @@ class MachineRefillSubscriber implements ISubscriber {
   }
 
   handle(event: MachineRefillEvent): StockLevelOkEvent | undefined {
-    console.log("refilling machine:", event.machineId());
+    console.log(
+      `refilling ${event.getRefillQuantity()} to machine ${event.machineId()}`
+    );
     const machine = this.machines.find((machine) => {
       return machine.id === event.machineId();
     });
+
+    if (machine.stockLevel >= 10) {
+      machine.stockLevel += event.getRefillQuantity();
+      console.log("stock level of machines:");
+      this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
+      return;
+    }
     machine.stockLevel += event.getRefillQuantity();
 
     console.log("stock level of machines:");
@@ -188,6 +213,7 @@ class PublishSubscribeService implements IPublishSubscribeService {
 
   publish(event: IEvent): IEvent | undefined {
     const handlers = this.subscribers[event.type()];
+    console.log("subscribers found: ", handlers.length);
     if (!handlers) return;
 
     for (const handler of handlers) {
