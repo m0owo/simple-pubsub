@@ -286,11 +286,11 @@ const eventGenerator = (): IEvent => {
   // console.log("-------------------- Publishing Events --------------------");
   // events.map((event) => pubSubService.publish(event));
   console.log("-------------------- Publishing Events --------------------");
-  for (const event of [...events]) {
+  for (const event of events) {
     const result = pubSubService.publish(event);
     if (result) {
-      pubSubService.publish(result);
-      // events.push(result);
+      // pubSubService.publish(result);
+      events.push(result);
     }
   }
 
@@ -306,11 +306,11 @@ const eventGenerator = (): IEvent => {
 
   // publish the events
   console.log("-------------------- Publishing Events --------------------");
-  for (const event of [...events]) {
+  for (const event of events) {
     const result = pubSubService.publish(event);
     if (result) {
-      pubSubService.publish(result);
-      // events.push(result);
+      // pubSubService.publish(result);
+      events.push(result);
     }
   }
 })();
