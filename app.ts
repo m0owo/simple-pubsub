@@ -103,6 +103,7 @@ class StockLevelOkEvent implements IEvent {
   }
 }
 
+const threshold = 10;
 class MachineSaleSubscriber implements ISubscriber {
   public machines: Machine[];
 
@@ -111,26 +112,36 @@ class MachineSaleSubscriber implements ISubscriber {
   }
 
   handle(event: MachineSaleEvent): LowStockWarningEvent | undefined {
+    let stockEvent: LowStockWarningEvent | undefined;
     console.log(
       `selling ${event.getSoldQuantity()} from machine ${event.machineId()}`
     );
     const machine = this.machines.find((machine) => {
       return machine.id === event.machineId();
     });
-    if (machine.stockLevel < 3) {
-      machine.stockLevel -= event.getSoldQuantity();
-      console.log("stock level of machines:");
-      this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
+
+    // prevent negative
+    if (machine.stockLevel < event.getSoldQuantity()) {
+      console.log("Not Enough Stock to Sell");
       return;
     }
-    machine.stockLevel -= event.getSoldQuantity();
 
+    // check for crossing threshold
+    if (
+      machine.stockLevel >= threshold &&
+      machine.stockLevel - event.getSoldQuantity() < threshold
+    ) {
+      stockEvent = new LowStockWarningEvent(
+        machine.stockLevel - event.getSoldQuantity(),
+        event.machineId()
+      );
+    }
+
+    machine.stockLevel -= event.getSoldQuantity();
     console.log("stock level of machines:");
     this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
 
-    if (machine.stockLevel < 3) {
-      return new LowStockWarningEvent(machine.stockLevel, event.machineId());
-    }
+    return stockEvent;
   }
 }
 
@@ -142,6 +153,7 @@ class MachineRefillSubscriber implements ISubscriber {
   }
 
   handle(event: MachineRefillEvent): StockLevelOkEvent | undefined {
+    let stockEvent: StockLevelOkEvent | undefined;
     console.log(
       `refilling ${event.getRefillQuantity()} to machine ${event.machineId()}`
     );
@@ -149,20 +161,22 @@ class MachineRefillSubscriber implements ISubscriber {
       return machine.id === event.machineId();
     });
 
-    if (machine.stockLevel >= 3) {
-      machine.stockLevel += event.getRefillQuantity();
-      console.log("stock level of machines:");
-      this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
-      return;
+    // check for crossing threshold
+    if (
+      machine.stockLevel < threshold &&
+      machine.stockLevel + event.getRefillQuantity() >= threshold
+    ) {
+      stockEvent = new StockLevelOkEvent(
+        machine.stockLevel + event.getRefillQuantity(),
+        event.machineId()
+      );
     }
-    machine.stockLevel += event.getRefillQuantity();
 
+    machine.stockLevel += event.getRefillQuantity();
     console.log("stock level of machines:");
     this.machines.forEach((m) => console.log(m.id, ":", m.stockLevel));
 
-    if (machine.stockLevel >= 3) {
-      return new StockLevelOkEvent(machine.stockLevel, event.machineId());
-    }
+    return stockEvent;
   }
 }
 
